@@ -1,0 +1,45 @@
+[project]
+name = "pycns"
+version = "0.0.1"
+authors = [
+  { name="Samuel Garcia", email="sam.garcia.die@gmail.com" },
+]
+description = "Python toolkit for reading/analysing CNS monitor data"
+readme = "README.md"
+requires-python = ">=3.9,<4.0"
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: OS Independent"
+]
+
+
+dependencies = [
+    "numpy",
+    "xarray",
+]
+
+[build-system]
+requires = ["setuptools>=62.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.exclude-package-data]
+spikeinterface = ["**/tests/test_*"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pycns*"]
+namespaces = false
+exclude = ["pycns.*.tests"]
+
+
+[project.urls]
+homepage = "https://github.com/samuelgarcia/pycns"
+repository = "https://github.com/samuelgarcia/pycns"
