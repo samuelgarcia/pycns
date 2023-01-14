@@ -13,8 +13,8 @@ import ipywidgets.widgets as W
 
 
 def make_timeslider(ds, time_range=None, width_cm=10):
-    t_start = min([ds[name].values[0] for name in ds.coords if name.startswith('times_')])
-    t_stop = max([ds[name].values[-1] for name in ds.coords if name.startswith('times_')])
+    t_start = min([ds[name].values[0] for name in ds.coords if name.startswith('times')])
+    t_stop = max([ds[name].values[-1] for name in ds.coords if name.startswith('times')])
 
     # print(t_start, t_stop)
     # print(int(t_start), int(t_stop))
@@ -58,7 +58,7 @@ def make_channel_selector(ds, width_cm=10, height_cm=5):
         if arr.ndim == 1:
             channels.append(stream_name)
         elif ds[stream_name].ndim == 2:
-            chan_coords = [k for k in arr.coords.keys() if not k.startswith('times_')][0]
+            chan_coords = [k for k in arr.coords.keys() if not k.startswith('times')][0]
             chans = list(arr.coords[chan_coords].values)
             channels.extend([f'{stream_name}/{chan}' for chan in chans])
     
@@ -112,14 +112,18 @@ class PlotUpdater:
 
         for i, channel in enumerate(channels):
             ax = self.axs[i]
-            ax.clear()
             
+            #ax.clear()
+            for l in ax.lines:
+                # clear remove also labels
+                l.remove()
             stream_name, chan = channels[i]
             
-            
             arr = self.ds[stream_name]
+            # the times is the first coords always
+            time_coords = arr.dims[0]
             # time slice
-            time_coords = f'times_{stream_name}'
+            # time_coords = f'times_{stream_name}'
             d = {time_coords: slice(t0, t1)}
             arr = arr.sel(**d)
             print(arr.shape)
@@ -130,15 +134,15 @@ class PlotUpdater:
                 arr = arr.sel(**d)
             print(arr.shape)
             
-            arr.plot.line(ax=ax, color='red')
+            # arr.plot.line(ax=ax, color='red')
             # print(arr)
-            # times = arr.coords[time_coords].values
+            times = arr.coords[time_coords].values
             # print(times)
-            # ax.plot(times, arr.values)
+            ax.plot(times, arr.values, color='k')
         
         # set scale on last axis
-        # ax = self.axs[-1]
-        # ax.set_xlim(t0, t1)
+        ax = self.axs[-1]
+        ax.set_xlim(t0, t1)
 
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
@@ -153,14 +157,19 @@ class PlotUpdater:
                                    left=0.15, right=.95, top=1., bottom=0.1,
                                    hspace=0)
         
-        self.axs = [self.fig.add_subplot(gs[i]) for i in range(n)]
+        # self.axs = [self.fig.add_subplot(gs[i]) for i in range(n)]
+        self.axs = []
         for i in range(n):
             stream_name, chan = channels[i]
             ax = self.fig.add_subplot(gs[i])
             if chan is None:
-                ax.set_ylabel(stream_name)
+                label = stream_name
             else:
-                ax.set_ylabel(chan)
+                label = chan
+            if 'units' in self.ds[stream_name].attrs:
+                units = self.ds[stream_name].attrs['units']
+                label = label + f' [{units}]'
+            ax.set_ylabel(label)
             self.axs.append(ax)
         
         for ax in self.axs[:-1]:
