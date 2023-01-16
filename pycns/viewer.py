@@ -250,7 +250,7 @@ def get_viewer(ds, width_cm=10, height_cm=8):
     #         )
 
 
-    return main_widget, updater
+    return main_widget
 
 
 

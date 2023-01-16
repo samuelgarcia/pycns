@@ -17,17 +17,20 @@ def resample(source_folder, target_folder, sample_rate=200., stream_names=None, 
     for stream_name in stream_names:
         times =source_ds[stream_name].coords[f'times_{stream_name}']
         if t_start is None:
-            t_start = times[0]
-            t_stop = times[-1]
+            t_start = times.values[0]
+            t_stop = times.values[-1]
         else:
-            t_start = min(t_start, times[0])
-            t_stop = min(t_stop, times[0])
+            t_start = min(t_start, times.values[0])
+            t_stop = max(t_stop, times.values[-1])
     print(t_start, t_stop)
     
     period_ns = int(1/sample_rate * 1e9)
     times = np.arange(int(t_start), int(t_stop)+1, period_ns).astype('datetime64[ns]')
     #times = pd.date_range(t_start, t_stop, freq=f'{period_ms}ms')
     print(times)
+    print(times.shape)
+    
+    # exit()
     for stream_name in stream_names:
         
         source_arr = source_ds[stream_name]
@@ -49,6 +52,8 @@ def resample(source_folder, target_folder, sample_rate=200., stream_names=None, 
 
         target_arr = target_arr.rename({f'times_{stream_name}': 'times'})
         print(target_arr)
+        
+        print(source_arr.shape, target_arr.shape)
         
         target_ds = xr.Dataset()
         target_ds[stream_name] = target_arr
