@@ -207,16 +207,52 @@ def test_read_one_stream():
     plt.show()
 
 
-def explore_folder(raw_folder):
+    
+translation = {
+    'ABP_Dias': 'DAP',
+}
+
+
+
+def get_stream(raw_folder, with_quality=False, translate=False):
 
     streams = {}
     for filename in raw_folder.glob('*,data'):
         # print()
         #~ print(filename.stem)
         fields = filename.stem.split(',')
-        stream_name = fields[0]
-        stream_type = fields[2]
-        streams[(stream_name, stream_type)] = filename
+        f0 = fields[0]
+        f1 = fields[1]
+        f2 = fields[2]
+        
+        if f2 == 'Event':
+            continue
+        
+        if f1 =='na' and f2 =='SampleSeries':
+            key = f0
+        elif f1 =='na' and f2 =='Numeric':
+            key = f0
+        elif f1 !='na' and f2 =='Numeric':
+            key = f0 + '_' + f1
+        elif f1 == 'Composite' and f2 =='SampleSeries':
+            key = f0
+        elif f1 == 'Composite' and f2 !='SampleSeries':
+            key = f0 + '_' + f2
+        elif f1 !='na' and f2 =='SampleSeries':
+            key = f0 + '_' + f1
+        else:
+            key = f0 + '_' + f1 + '_' + f2
+        if not with_quality and 'Quality' in f2:
+            continue
+        
+        
+        
+        if translate and key in translation:
+            key = translation[key]
+        
+        assert key not in streams
+        
+        streams[key] = filename
 
     return streams
 
