@@ -3,6 +3,8 @@
 
 import numpy as np
 
+import xarray as xr
+
 import matplotlib.pyplot as plt
 
 import ipywidgets.widgets as W
@@ -12,17 +14,19 @@ import ipywidgets.widgets as W
 # TODO expandable layout for fiigure.canvas
 
 
-def make_timeslider(ds, time_range=None, width_cm=10):
-    t_start = min([ds[name].values[0] for name in ds.coords if name.startswith('times')])
-    t_stop = max([ds[name].values[-1] for name in ds.coords if name.startswith('times')])
+def make_timeslider(data, time_range=None, width_cm=10):
 
-    # print(t_start, t_stop)
-    # print(int(t_start), int(t_stop))
+    if isinstance(data, xr.Dataset):
+        ds = data
+        t_start = min([ds[name].values[0] for name in ds.coords if name.startswith('times')])
+        t_stop = max([ds[name].values[-1] for name in ds.coords if name.startswith('times')])
+    else:
+        t_start = min([stream.get_times()[0].astype('datetime64[ns]') for stream in data.streams.values()])
+        t_stop = max([stream.get_times()[-1].astype('datetime64[ns]') for stream in data.streams.values()])
 
     if time_range is None:
         time_range = [t_start, t_start + np.timedelta64(1, 'm')]
     
-
 
     time_label = W.Label(value=f'{time_range[0]}',
                          layout=W.Layout(width=f'6cm'))
@@ -30,15 +34,15 @@ def make_timeslider(ds, time_range=None, width_cm=10):
     time_slider = W.IntSlider(
         orientation='horizontal',
         description='time:',
-        value=time_range[0],
-        min=t_start,
-        max=t_stop,
+        value=np.int64(time_range[0]),
+        min=np.int64(t_start),
+        max=np.int64(t_stop),
         readout=False,
         continuous_update=False,
         layout=W.Layout(width=f'{width_cm}cm')
     )
 
-    delta = np.diff(time_range) / 1e9
+    delta = np.int64(np.diff(time_range)) / 1e9
     window_sizer = W.BoundedFloatText(value=delta, step=0.1, min=0.005,max=3600,
                                       description='win (s)',
                                      layout=W.Layout(width=f'4cm'))
@@ -50,18 +54,27 @@ def make_timeslider(ds, time_range=None, width_cm=10):
     # return widget, controller
     return main_widget, some_widgets
 
-def make_channel_selector(ds, width_cm=10, height_cm=5):
+def make_channel_selector(data, width_cm=10, height_cm=5):
+
+
     channels =[]
-    
-    for stream_name in ds.keys():
-        arr = ds[stream_name]
-        if arr.ndim == 1:
-            channels.append(stream_name)
-        elif ds[stream_name].ndim == 2:
-            chan_coords = [k for k in arr.coords.keys() if not k.startswith('times')][0]
-            chans = list(arr.coords[chan_coords].values)
-            channels.extend([f'{stream_name}/{chan}' for chan in chans])
-    
+    if isinstance(data, xr.Dataset):
+        ds = data
+        for stream_name in ds.keys():
+            arr = ds[stream_name]
+            if arr.ndim == 1:
+                channels.append(stream_name)
+            elif ds[stream_name].ndim == 2:
+                chan_coords = [k for k in arr.coords.keys() if not k.startswith('times')][0]
+                chans = list(arr.coords[chan_coords].values)
+                channels.extend([f'{stream_name}/{chan}' for chan in chans])
+    else:
+        for stream_name, stream in data.streams.items():
+            if stream.channel_names is None:
+                channels.append(stream_name)
+            else:
+                channels.extend([f'{stream_name}/{chan}' for chan in stream.channel_names])
+
     chan_selected = [chan for chan in channels if '/' not in chan]
     chan_selected = chan_selected[:5]
     
@@ -78,11 +91,12 @@ def make_channel_selector(ds, width_cm=10, height_cm=5):
 
 
 class PlotUpdater:
-    def __init__(self, ds, widgets, fig):
-        self.ds = ds
+    def __init__(self, data, widgets, fig):
+        self.data = data
         self.widgets = widgets
         self.fig = fig
 
+        self._is_dataset = isinstance(data, xr.Dataset)
 
         self.axs = None
         
@@ -99,7 +113,7 @@ class PlotUpdater:
         t1 = t0 + int(self.widgets['window_sizer'].value * 1e9)
         
         
-        
+        print(t0, t1)
         t0 = np.datetime64(t0, 'ns')
         t1 = np.datetime64(t1, 'ns')
         print(t0, t1)
@@ -119,26 +133,28 @@ class PlotUpdater:
                 l.remove()
             stream_name, chan = channels[i]
             
-            arr = self.ds[stream_name]
-            # the times is the first coords always
-            time_coords = arr.dims[0]
-            # time slice
-            # time_coords = f'times_{stream_name}'
-            d = {time_coords: slice(t0, t1)}
-            arr = arr.sel(**d)
-            print(arr.shape)
-            if chan is not None:
-                #EEG channel slice
-                chan_coords = [k for k in arr.coords.keys() if not k.startswith('times_')][0]
-                d = {chan_coords : chan}
+            if self._is_dataset:
+                arr = self.data[stream_name]
+                # the times is the first coords always
+                time_coords = arr.dims[0]
+                # time slice
+                # time_coords = f'times_{stream_name}'
+                d = {time_coords: slice(t0, t1)}
                 arr = arr.sel(**d)
-            print(arr.shape)
-            
-            # arr.plot.line(ax=ax, color='red')
-            # print(arr)
-            times = arr.coords[time_coords].values
+                if chan is not None:
+                    #EEG channel slice
+                    chan_coords = [k for k in arr.coords.keys() if not k.startswith('times_')][0]
+                    d = {chan_coords : chan}
+                    arr = arr.sel(**d)
+                times = arr.coords[time_coords].values
+                arr = arr.values
+            else:
+                stream = self.data.streams[stream_name]
+                arr, times = stream.get_data(sel=slice(t0, t1), with_times=True)
+
             # print(times)
-            ax.plot(times, arr.values, color='k')
+            # print(arr)
+            ax.plot(times, arr, color='k')
         
         # set scale on last axis
         ax = self.axs[-1]
@@ -166,9 +182,15 @@ class PlotUpdater:
                 label = stream_name
             else:
                 label = chan
-            if 'units' in self.ds[stream_name].attrs:
-                units = self.ds[stream_name].attrs['units']
-                label = label + f' [{units}]'
+            if self._is_dataset:
+                if 'units' in self.data[stream_name].attrs:
+                    units = self.data[stream_name].attrs['units']
+                    label = label + f' [{units}]'
+            else:
+                units = self.data.streams[stream_name].units
+                if units is not None:
+                    label = label + f' [{units}]'
+
             ax.set_ylabel(label)
             self.axs.append(ax)
         
@@ -194,7 +216,7 @@ class PlotUpdater:
 
 cm = 1 / 2.54
 
-def get_viewer(ds, width_cm=10, height_cm=8):
+def get_viewer(data, width_cm=10, height_cm=8):
 
     ratios = [0.1, 0.8, 0.2]
     height_cm = width_cm * ratios[1]
@@ -216,15 +238,15 @@ def get_viewer(ds, width_cm=10, height_cm=8):
     # fig = plt.figure()
 
     # time slider
-    time_slider, some_widgets = make_timeslider(ds, width_cm=width_cm)
+    time_slider, some_widgets = make_timeslider(data, width_cm=width_cm)
     all_widgets.update(some_widgets)
 
     # channels
-    channel_selector, some_widgets = make_channel_selector(ds)
+    channel_selector, some_widgets = make_channel_selector(data)
     all_widgets.update(some_widgets)
 
 
-    updater = PlotUpdater(ds, all_widgets, fig)
+    updater = PlotUpdater(data, all_widgets, fig)
     all_widgets['time_slider'].observe(updater.update_time)
     all_widgets['window_sizer'].observe(updater.update_time)
     all_widgets['channel_selector'].observe(updater.full_refresh)
