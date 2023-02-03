@@ -2,6 +2,9 @@ from pathlib import Path
 import xml
 import xml.etree.ElementTree
 
+# TODO rewrite time vector
+# TODO add gain
+
 import numpy as np
 # this is needed for the 24bit trick
 from numpy.lib.stride_tricks import as_strided
@@ -239,7 +242,7 @@ class CnsStream:
         return times
 
 
-    def get_data(self, isel=None, sel=None, with_times=False):
+    def get_data(self, isel=None, sel=None, with_times=False, apply_gain=False):
         """
 
         isel: selection by integer range

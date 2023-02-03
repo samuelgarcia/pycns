@@ -12,6 +12,8 @@ import ipywidgets.widgets as W
 import time
 
 # TODO expandable layout for fiigure.canvas
+# TODO make an absctract class to retrieve data from dataset or cnsreader
+
 
 
 def make_timeslider(data, stream_names, time_range=None, width_cm=10):
@@ -56,9 +58,8 @@ def make_timeslider(data, stream_names, time_range=None, width_cm=10):
     # return widget, controller
     return main_widget, some_widgets
 
+
 def make_channel_selector(data, stream_names, width_cm=10, height_cm=5):
-
-
     channels =[]
     if isinstance(data, xr.Dataset):
         ds = data
@@ -133,7 +134,8 @@ class PlotUpdater:
         
 
         channels = self.get_visible_channels()
-
+        
+        previous_stream = None
         for i, channel in enumerate(channels):
             # TODO change the channel concept
             # this approach is not optimal because several call to the same stream when EEG
@@ -163,17 +165,17 @@ class PlotUpdater:
                 times = arr.coords[time_coords].values
                 arr = arr.values
             else:
-                print(channel)
+                #~ print(channel)
                 stream = self.data.streams[stream_name]
-                tt0 = time.perf_counter()
+                #~ tt0 = time.perf_counter()
                 arr, times = stream.get_data(sel=slice(t0, t1), with_times=True)
-                tt1 = time.perf_counter()
-                print(stream, tt1 - tt0, arr.shape)
+                #~ tt1 = time.perf_counter()
+                #~ print(stream, tt1 - tt0, arr.shape)
                 
                 if chan is not None:
                     chan_ind = list(stream.channel_names).index(chan)
                     arr = arr[:, chan_ind]
-                    print('ici', chan_ind, arr.shape)
+                    #~ print('ici', chan_ind, arr.shape)
                 
 
             ax.plot(times, arr, color='k')
@@ -302,7 +304,7 @@ def get_viewer(data, stream_names=None, width_cm=10, height_cm=8):
     #             pane_widths=ratios
     #         )
 
-
+    main_widget._all_widgets = all_widgets
     return main_widget
 
 
