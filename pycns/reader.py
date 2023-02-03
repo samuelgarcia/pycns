@@ -3,7 +3,8 @@ import xml
 import xml.etree.ElementTree
 
 import numpy as np
-
+# this is needed for the 24bit trick
+from numpy.lib.stride_tricks import as_strided
 
 translation = {
     'ABP_Dias': 'DAP',
@@ -39,7 +40,6 @@ def explore_folder(folder, with_quality=False, translate=False):
             key = f0 + '_' + f1 + '_' + f2
         if not with_quality and 'Quality' in f2:
             continue
-        
         
         
         if translate and key in translation:
@@ -126,12 +126,14 @@ class CnsStream:
                 chan_name = chan_txt[1]
                 self.channel_names.append(chan_name)
 
-
+        self.need_24_bit_convert = False
         # read data buffer
         if data_type == 'Integer':
             self.raw_data = np.memmap(raw_file, mode='r', dtype='int32')
+            self.shape = self.raw_data.shape
         elif data_type == 'Float':
             self.raw_data = np.memmap(raw_file, mode='r', dtype='float32')
+            self.shape = self.raw_data.shape
         elif data_type == 'Composite':
             num_channels = len(self.channel_names)
             # check all packet have same dtype
@@ -139,6 +141,7 @@ class CnsStream:
             
             if self.index['data_id'][0] - 0x80 == 0x05:
                 # 24bits
+                self.need_24_bit_convert = True
                 
                 
                 # using strides trick
@@ -160,8 +163,15 @@ class CnsStream:
                 #~ t0 = time.perf_counter()
                 flat_data_uint24 = np.memmap(raw_file, mode='r', dtype='u1')
                 num_frames = flat_data_uint24.size // (num_channels * 3)
-                data_uint24 = flat_data_uint24.reshape(num_frames, num_channels, 3)
-                self.raw_data = data_uint24
+                #~ print('num_frames', num_frames, type(num_frames))
+                #~ print('num_channels', num_channels, type(num_channels))
+                # data_uint24 = flat_data_uint24.reshape(num_frames, num_channels, 3)
+                self.raw_data = flat_data_uint24
+                self.data_strided = as_strided(self.raw_data.view('int32'), strides=(num_channels * 3, 3,), shape=(num_frames, num_channels))
+                
+                self.shape = (num_frames, num_channels)
+                
+                
                 #~ data_uint32 = np.zeros((num_frames, num_channels, 4), dtype='u1')
                 #~ data_uint32[:, :, :3] = data_uint24
                 #~ data = data_uint32.flatten().view('u4').reshape(num_frames, num_channels)
@@ -173,6 +183,7 @@ class CnsStream:
                 # 32bits
                 data = np.memmap(raw_file, mode='r', dtype='int32')
                 self.raw_data = data.reshape(-1, num_channels)
+                self.shape = self.raw_data.shape
             else:
                 raise NotImplementedError('Composite data type not known')
             
@@ -188,13 +199,13 @@ class CnsStream:
         return txt
     
     def get_times(self):
-        # print('get_times', self.name)
+        
 
         if hasattr(self, '_times'):
             # TODO make option to cache or not the times
             return self._times
-
-        length = self.raw_data.shape[0]
+    
+        length = self.shape[0]
         times = np.zeros(length, dtype='datetime64[us]')
         
         # strategy 1 : interpolate between runs
@@ -239,7 +250,7 @@ class CnsStream:
         times = self.get_times()
 
         i0 = 0
-        i1 = self.raw_data.shape[0]
+        i1 = self.shape[0]
         
 
         if sel is not None:
@@ -254,19 +265,25 @@ class CnsStream:
             assert sel.step is None 
 
         elif isel is not None:
-            print(isel.start)
+            # print(isel.start)
             if isel.start is not None:
                 i0 = int(isel.start)
             if isel.stop is not None:
                 i1 = int(isel.stop)
             assert isel.step is None 
 
-        print(i0, i1)
+        # print(i0, i1)
 
-        times = times[i0 :i1]
-        data = self.raw_data[i0: i1]
+        
+        if self.need_24_bit_convert:
+            data_32bit = self.data_strided[i0 : i1]
+            # need to remove the first 8bits
+            data = data_32bit & 0x00ffffff
+        else:
+            data = self.raw_data[i0: i1]
 
         if with_times:
+            times = times[i0 :i1]
             return data, times
         else:
             return data
