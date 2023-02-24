@@ -6,6 +6,8 @@ import xml.etree.ElementTree
 # TODO add gain
 
 import numpy as np
+import xarray as xr
+import scipy.interpolate
 # this is needed for the 24bit trick
 from numpy.lib.stride_tricks import as_strided
 
@@ -76,6 +78,81 @@ class CnsReader:
         txt +=f'{len(self.stream_names)} streams : {list(self.stream_names.keys())}'
 
         return txt
+    
+    def export_to_xarray(self, stream_names,
+                         start=None, stop=None,
+                         folder=None, resample=False, sample_rate=None):
+        """
+        Export to several streams a big xarray Dataset.
+        Can be done in memory or in a zarr folder.
+        Every stream can keep the original time vector or resample to a unique time vector.
+
+        """
+
+        if start is None:
+            start = np.min([self.streams[name].get_times()[0] for name in stream_names])
+        if stop is None:
+            stop = max([self.streams[name].get_times()[-1] for name in stream_names])
+        
+        start = np.datetime64(start, 'us')
+        stop = np.datetime64(stop, 'us')
+
+        if folder is None:
+            # in memory Dataset
+            ds = xr.Dataset()
+        else:
+            folder = Path(folder)
+            assert not folder.exists(), f'{folder} already exists'
+
+        if resample:
+            assert sample_rate is not None
+
+            period_ns = np.int64(1/sample_rate * 1e9)
+            common_times = np.arange(start.astype('datetime64[ns]').astype('int64'),
+                            stop.astype('datetime64[ns]').astype('int64'),
+                            period_ns).astype('datetime64[ns]')
+
+        for stream_name in stream_names:
+            stream = self.streams[stream_name]
+            sig, times = stream.get_data(sel=slice(start, stop), with_times=True, apply_gain=True)
+
+            if not resample:
+                # every array have its own time vector
+                time_dim = f'times_{stream_name}'
+                dims = (time_dim, )
+                coords = {time_dim: times}
+            else:
+                # resample
+                dims = ('times', )
+                coords = {'times': common_times}
+                times = times.astype('datetime64[ns]')
+                f = scipy.interpolate.interp1d(times.astype('int64'), sig, kind='linear', axis=0,
+                                           copy=True, bounds_error=False,
+                                           fill_value=np.nan, assume_sorted=True)
+                sig = f(common_times.astype('int64'))
+
+            # channels when 2D
+            if sig.ndim == 2 and stream.channel_names is not None:
+                coords['channels'] = stream.channel_names
+                dims = dims + ('channels', )
+            
+            arr = xr.DataArray(sig, dims=dims, coords=coords)
+            if not resample:
+                arr.attrs['sample_rate'] = stream.sample_rate
+            else:
+                arr.attrs['sample_rate'] = sample_rate
+            
+            if folder is None:
+                ds[stream_name] = arr
+            else:
+                ds = xr.Dataset()
+                ds[stream_name] = arr
+                ds.to_zarr(folder, mode='a')
+
+        if folder is not None:
+            ds = xr.open_zarr(folder)
+
+        return ds
 
         
 
@@ -104,6 +181,10 @@ class CnsStream:
         
         # read time index
         self.index = np.memmap(self.index_file, mode='r', dtype=dtype_index)
+
+        sample_interval_us = self.index['sample_interval_integer'] + (self.index['sample_interval_fract'] / 2 **32)
+        self.sample_rate = np.mean(1e6 / sample_interval_us)
+
 
         # parse settings (units, gain, channel name)
         self.gain = None
@@ -198,7 +279,7 @@ class CnsStream:
             name = self.raw_file.stem
         else:
             name = self.name
-        txt = f'CnsStream: {name}'
+        txt = f'CnsStream {name}  rate:{self.sample_rate:0.0f}Hz  shape:{self.shape}'
         return txt
     
     def get_times(self):
