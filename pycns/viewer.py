@@ -168,7 +168,7 @@ class PlotUpdater:
                 #~ print(channel)
                 stream = self.data.streams[stream_name]
                 #~ tt0 = time.perf_counter()
-                arr, times = stream.get_data(sel=slice(t0, t1), with_times=True)
+                arr, times = stream.get_data(sel=slice(t0, t1), with_times=True, apply_gain=True)
                 #~ tt1 = time.perf_counter()
                 #~ print(stream, tt1 - tt0, arr.shape)
                 

@@ -3,7 +3,6 @@ import xml
 import xml.etree.ElementTree
 
 # TODO rewrite time vector
-# TODO add gain
 
 import numpy as np
 import xarray as xr
@@ -89,24 +88,27 @@ class CnsReader:
 
         """
 
-        if start is None:
-            start = np.min([self.streams[name].get_times()[0] for name in stream_names])
-        if stop is None:
-            stop = max([self.streams[name].get_times()[-1] for name in stream_names])
-        
-        start = np.datetime64(start, 'us')
-        stop = np.datetime64(stop, 'us')
-
+        # output
         if folder is None:
             # in memory Dataset
             ds = xr.Dataset()
         else:
+            # zarr folder
             folder = Path(folder)
             assert not folder.exists(), f'{folder} already exists'
 
+        # time range
+        if start is None:
+            start = np.min([self.streams[name].get_times()[0] for name in stream_names])
+        if stop is None:
+            stop = max([self.streams[name].get_times()[-1] for name in stream_names])
+        start = np.datetime64(start, 'us')
+        stop = np.datetime64(stop, 'us')
+
+
+
         if resample:
             assert sample_rate is not None
-
             period_ns = np.int64(1/sample_rate * 1e9)
             common_times = np.arange(start.astype('datetime64[ns]').astype('int64'),
                             stop.astype('datetime64[ns]').astype('int64'),
@@ -118,10 +120,15 @@ class CnsReader:
 
             if not resample:
                 # every array have its own time vector
+                sig, times = stream.get_data(sel=slice(start, stop), with_times=True, apply_gain=True)
                 time_dim = f'times_{stream_name}'
                 dims = (time_dim, )
                 coords = {time_dim: times}
             else:
+                # add a few sample on border for better reample                
+                delta = np.timedelta64(int(5 * 1e6 / stream.sample_rate), 'us')
+                sig, times = stream.get_data(sel=slice(start - delta, stop + delta), with_times=True, apply_gain=True)
+
                 # resample
                 dims = ('times', )
                 coords = {'times': common_times}
@@ -366,17 +373,14 @@ class CnsStream:
         else:
             data = self.raw_data[i0: i1]
 
+        if apply_gain and self.gain is not None:
+            data = data * self.gain
+            if self.offset is not None and self.offset != 0.:
+                data += self.offset
+
         if with_times:
             times = times[i0 :i1]
             return data, times
         else:
             return data
-
-            
-
-            
-
-
-
-
 
