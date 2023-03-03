@@ -298,7 +298,7 @@ class Viewer(W.Tab):
                 self.fig = plt.figure(constrained_layout=True)  # 
                 canvas = self.fig.canvas
                 # self.canvas = canvas
-                canvas.toolbar_visible = True
+                canvas.toolbar_visible = False
                 canvas.header_visible = False
                 canvas.footer_visible = False
                 # canvas.resizable = False

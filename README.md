@@ -2,7 +2,7 @@
 Reader and tools for analysing CNS monitor data
 
 
-Installation:
+## Installation
 
 ```bash
 git clone https://github.com/samuelgarcia/pycns.git
@@ -16,42 +16,36 @@ cd pycns
 git clone pull origin main
 ```
 
-Example convert raw to xarray:
+## Example
+
+
 ```python
-from pycns import convert_folder_to_dataset
+from pycns import CnsReader, get_viewer
 from pathlib import Path
 
 base_folder = Path('/XXX/YYY/ZZZ')
-raw_folder = base_folder / 'raw_data/P1'
-zarr_folder = base_folder / 'data_xarray/P1'
-    
-load_streams = ['EEG', 'RESP', 'ECG']
-convert_folder_to_dataset(raw_folder, zarr_folder, load_streams=load_streams, progress_bar=False)
+
+# this show all available streams
+cns_reader = CnsReader(raw_folder)
+print(cns_reader)
+
+# this show stream obkect
+print(cns_reader.streams)
+
+# get some chunk with time vector handle with numpy.datetime64
+sig, times = cns_reader.streams['CO2'].get_data(isel=slice(100_000, 110_000), with_times=True, apply_gain=True)
+
+# easy viewer to navigate (this work only in jupyter)
+viewer = get_viewer(cns_reader)
+display(viewer)
+
+# export some streams to xarray with a resample on common time base
+stream_names = ['ECG_II', 'RESP', 'EEG']
+start = '2021-01-08T00:10:15'
+stop = '2021-01-08T00:30:52'
+ds = cns_reader.export_to_xarray(stream_names, start=start, stop=stop, resample=True, sample_rate=100.)
 ```
 
-Example resample all stream to unique to unique sample rate:
-```python
-from pycns import convert_folder_to_dataset
-from pathlib import Path
 
-base_folder = Path('/XXX/YYY/ZZZ')
-source_folder = base_folder / 'data_xarray/P1'
-target_folder = base_folder / 'data_xarray/P1_resample'
-
-resample(source_folder, target_folder, sample_rate=200., stream_names=['ECG', 'RESP', ])
-```
-
-
-Example open viewer in jupyter:
-```python
-%matplotlib widget
-
-base_folder = Path('/XXX/YYY/ZZZ')
-dataset_folder = base_folder / 'data_xarray' / 'P1'
-ds = xr.open_zarr(dataset_folder)
-ds
-
-
-main_widget = get_viewer(ds)
-main_widget
-```
+Note : 
+  * to get the viewer (based on ipywidgets) properly in vscode you need `pip install -U ipywidgets==7.7.1`
