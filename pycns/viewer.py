@@ -176,7 +176,7 @@ class TimeSlider(W.HBox):
         self.time_range_int = (int(time_range[0].view(np.int64)), int(time_range[1].view(np.int64)))
         
         
-        layout = W.Layout(align_items="center", width="1cm", height="100%")
+        layout = W.Layout(align_items="center", width="1.5cm", height="100%")
         but_left = W.Button(description='', disabled=False, button_style='', icon='arrow-left', layout=layout)
         but_right = W.Button(description='', disabled=False, button_style='', icon='arrow-right', layout=layout)
         
@@ -186,21 +186,14 @@ class TimeSlider(W.HBox):
         self.move_size = W.Dropdown(options=['1 s', '1 m', '30 m', '1 h', '6 h', '24 h'],
                                     value='1 h',
                                     description='',
-                                    layout = W.Layout(width="2cm", height="100%")
+                                    layout = W.Layout(width="2cm")
                                     )
 
         # DatetimePicker is only for ipywidget v8 (which is not working in vscode 2023-03)
-        # self.time_label = W.Label(value=f'{time_range[0]}',
-        #                     layout=W.Layout(width=f'20%')
-        #                     )
-
-        self.time_label = W.Text(
-            value=f'{time_range[0]}',
-            description='',
-            disabled=False,
-            layout=W.Layout(width=f'20%', min_width='5.5cm', max_width='6cm'),
-        )
+        self.time_label = W.Text(value=f'{time_range[0]}',description='',
+                                 disabled=False, layout=W.Layout(width='5.5cm'))
         self.time_label.observe(self.time_label_changed)
+
 
         self.slider = W.IntSlider(
             orientation='horizontal',
@@ -285,8 +278,12 @@ class TimeSlider(W.HBox):
 
                                  
 
-def make_channel_selector(data, stream_names, width_cm=10, height_cm=5):
+def make_channel_selector(data, stream_names, ext_plots, width_cm=10, height_cm=5):
     channels = data.get_channels(stream_names)
+
+    if ext_plots is not None:
+        channels.extend([name for name in ext_plots.keys()])
+
     
     chan_selected = channels[:6]
     
@@ -304,7 +301,7 @@ def make_channel_selector(data, stream_names, width_cm=10, height_cm=5):
 
 
 class Viewer(W.Tab):
-    def __init__(self, data_in, stream_names):
+    def __init__(self, data_in, stream_names, ext_plots=None):
         
         if isinstance(data_in, xr.Dataset):
             self.data = DataFromXarray(data_in)
@@ -315,7 +312,13 @@ class Viewer(W.Tab):
 
         if stream_names is None:
             stream_names = self.data.get_stream_names()
-
+        
+        if ext_plots is not None:
+            # TODO check that this do not overlap with channel names
+            # channels = data.get_channels(stream_names)
+            self.ext_plots = {p.name: p for p in ext_plots}
+        else:
+            self.ext_plots = {}
         
         # TODO force canvas to ipympl
         
@@ -342,7 +345,7 @@ class Viewer(W.Tab):
         start, stop = self.data.get_start_stop(stream_names)
         self.time_slider = TimeSlider(start, stop)
 
-        self.channel_selector, some_widgets=make_channel_selector(self.data, stream_names)
+        self.channel_selector, some_widgets=make_channel_selector(self.data, stream_names, self.ext_plots)
         
         
         self.time_slider.observe(self.refresh)
@@ -378,16 +381,22 @@ class Viewer(W.Tab):
         # self.axs = [self.fig.add_subplot(gs[i]) for i in range(n)]
         self.axs = []
         for i in range(n):
-            stream_name, chan = channels[i]
+            channel = channels[i]
+            stream_name, chan = channel
+
             ax = self.fig.add_subplot(gs[i])
-            if chan is None:
-                label = stream_name
+
+            if stream_name not in self.ext_plots:
+                
+                if chan is None:
+                    label = stream_name
+                else:
+                    label = chan
+                units = self.data.get_units(stream_name)
+                if units is not None:
+                    label = label + f' [{units}]'
             else:
-                label = chan
-            
-            units = self.data.get_units(stream_name)
-            if units is not None:
-                label = label + f' [{units}]'
+                label = stream_name
 
             ax.set_ylabel(label)
             self.axs.append(ax)
@@ -419,9 +428,11 @@ class Viewer(W.Tab):
                 l.remove()
             
             stream_name, chan = channels[i]
-            
-            sig, times = self.data.get_signal(stream_name, chan, t0, t1)
-            ax.plot(times, sig, color='k')
+            if stream_name not in self.ext_plots:
+                sig, times = self.data.get_signal(stream_name, chan, t0, t1)
+                ax.plot(times, sig, color='k')
+            else:
+                self.ext_plots[stream_name].plot(ax, t0, t1)
         
         # set scale on last axis
         ax = self.axs[-1]
@@ -431,8 +442,6 @@ class Viewer(W.Tab):
         # self.fig.canvas.flush_events()
 
 
-def get_viewer(data, stream_names=None):
-    return Viewer(data, stream_names)
-
-
+def get_viewer(*args, **kwargs):
+    return Viewer(*args, **kwargs)
 
