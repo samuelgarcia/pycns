@@ -189,11 +189,18 @@ class TimeSlider(W.HBox):
                                     layout = W.Layout(width="2cm", height="100%")
                                     )
 
+        # DatetimePicker is only for ipywidget v8 (which is not working in vscode 2023-03)
+        # self.time_label = W.Label(value=f'{time_range[0]}',
+        #                     layout=W.Layout(width=f'20%')
+        #                     )
 
-        self.time_label = W.Label(value=f'{time_range[0]}',
-                            # layout=W.Layout(width=f'6cm')
-                            layout=W.Layout(width=f'20%')
-                            )
+        self.time_label = W.Text(
+            value=f'{time_range[0]}',
+            description='',
+            disabled=False,
+            layout=W.Layout(width=f'20%', min_width='5.5cm', max_width='6cm'),
+        )
+        self.time_label.observe(self.time_label_changed)
 
         self.slider = W.IntSlider(
             orientation='horizontal',
@@ -227,19 +234,40 @@ class TimeSlider(W.HBox):
         t1 = np.int64(self.time_range_int[1]).view(self.dtype)
         return t0, t1
     
-    def update_time(self):
-        t0 = np.int64(self.slider.value).view(self.dtype)
+    def update_time(self, new_time=None, update_slider=False, update_label=False):
+
+        if new_time is None:
+            t0 = np.int64(self.slider.value).view(self.dtype)
+        else:
+            t0 = new_time.astype(self.dtype)
         delta_s = self.window_sizer.value
         t1 = (t0 + np.timedelta64(int(delta_s), 's')).astype(self.dtype)
         
-        self.time_label.value = f'{t0}'
         self.time_range_int = (int(t0.view(np.int64)), int(t1.view(np.int64)))
+
+        if update_label:
+            self.time_label.unobserve(self.time_label_changed)
+            self.time_label.value = f'{t0}'
+            self.time_label.observe(self.time_label_changed)
+
+        if update_slider:
+            self.window_sizer.unobserve(self.win_size_changed)
+            self.slider.value = int(t0.view('int64'))
+            self.window_sizer.observe(self.win_size_changed)
     
+    def time_label_changed(self, change=None):
+        try:
+            new_time = np.datetime64(self.time_label.value).view(self.dtype)
+            self.update_time(new_time=new_time, update_slider=True)
+        except:
+            pass
+
     def win_size_changed(self, change=None):
         self.update_time()
         
     def slider_moved(self, change=None):
-        self.update_time()
+        new_time = np.int64(self.slider.value).view(self.dtype)
+        self.update_time(new_time=new_time, update_label=True)
     
     def move(self, sign):
         value, units = self.move_size.value.split(' ')
