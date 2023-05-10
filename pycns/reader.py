@@ -14,41 +14,51 @@ translation = {
     'ABP_Dias': 'DAP',
 }
 
-def explore_folder(folder, with_quality=False, translate=False):
+def explore_folder(folder, with_quality=False, with_processed=False, translate=False):
 
     name_streams = {}
-    for filename in folder.glob('*,data'):
-        # print()
-        #~ print(filename.stem)
-        fields = filename.stem.split(',')
+    if with_processed:
+        pattern = '**/*,data'
+    else:
+        pattern = '*,data'
+
+    for filename in folder.glob(pattern):
+        # print(filename.stem)
+        # print(filename.name)
+        fields = filename.name.split(',')
         f0 = fields[0]
         f1 = fields[1]
         f2 = fields[2]
         
         if f2 == 'Event':
             continue
-        
-        if f1 =='na' and f2 =='SampleSeries':
-            key = f0
-        elif f1 =='na' and f2 =='Numeric':
-            key = f0
-        elif f1 !='na' and f2 =='Numeric':
-            key = f0 + '_' + f1
-        elif f1 == 'Composite' and f2 =='SampleSeries':
-            key = f0
-        elif f1 == 'Composite' and f2 !='SampleSeries':
-            key = f0 + '_' + f2
-        elif f1 !='na' and f2 =='SampleSeries':
-            key = f0 + '_' + f1
-        else:
-            key = f0 + '_' + f1 + '_' + f2
+
         if not with_quality and 'Quality' in f2:
             continue
         
+        if 'Processed' not in filename.parent.stem:
+            if f1 =='na' and f2 =='SampleSeries':
+                key = f0
+            elif f1 =='na' and f2 =='Numeric':
+                key = f0
+            elif f1 !='na' and f2 =='Numeric':
+                key = f0 + '_' + f1
+            elif f1 == 'Composite' and f2 =='SampleSeries':
+                key = f0
+            elif f1 == 'Composite' and f2 !='SampleSeries':
+                key = f0 + '_' + f2
+            elif f1 !='na' and f2 =='SampleSeries':
+                key = f0 + '_' + f1
+            else:
+                key = f0 + '_' + f1 + '_' + f2
         
-        if translate and key in translation:
-            key = translation[key]
-        
+            if translate and key in translation:
+                key = translation[key]
+        else:
+            key = 'Processed_' + f0 + '_' + f1
+            for field in fields[4:-1]:
+                key = key + '_' + field
+
         assert key not in name_streams
         
         name_streams[key] = filename
@@ -63,14 +73,19 @@ class CnsReader:
     
     
     """
-    def __init__(self, folder, with_quality=False, translate=False):
+    def __init__(self, folder, with_quality=False, with_processed=False, translate=False):
         self.folder = Path(folder)
 
-        self.stream_names = explore_folder(folder, with_quality=with_quality, translate=translate)
+        self.stream_names = explore_folder(folder, with_quality=with_quality, 
+                                           with_processed=with_processed, translate=translate)
 
         self.streams = {}
         for name, raw_file in self.stream_names.items():
-            self.streams[name] = CnsStream(raw_file, name)
+            try:
+                self.streams[name] = CnsStream(raw_file, name)
+            except:
+                pass
+                # print('Problem to read this file:', raw_file)
 
     def __repr__(self):
         txt = f'CnsReader: {self.folder.stem}\n'
