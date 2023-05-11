@@ -55,6 +55,9 @@ def explore_folder(folder, with_quality=False, with_processed=False, translate=F
             if translate and key in translation:
                 key = translation[key]
         else:
+            if 'PowerSpectrum' in filename.name:
+                continue
+
             key = 'Processed_' + f0 + '_' + f1
             for field in fields[4:-1]:
                 key = key + '_' + field
@@ -81,11 +84,12 @@ class CnsReader:
 
         self.streams = {}
         for name, raw_file in self.stream_names.items():
-            try:
-                self.streams[name] = CnsStream(raw_file, name)
-            except:
-                pass
-                # print('Problem to read this file:', raw_file)
+            self.streams[name] = CnsStream(raw_file, name)
+            # try:
+            #     self.streams[name] = CnsStream(raw_file, name)
+            # except:
+            #     pass
+            #     print('Problem to read this file:', raw_file)
 
     def __repr__(self):
         txt = f'CnsReader: {self.folder.stem}\n'
@@ -194,8 +198,8 @@ class CnsStream:
         raw_file = Path(raw_file)
         self.name = name
         
-        name = raw_file.stem
-        self.raw_file =raw_file
+        name = raw_file.name
+        self.raw_file = raw_file
         self.index_file = raw_file.parent / name.replace(',data', ',index')
         self.settings_file = raw_file.parent / name.replace(',data', ',settings')
         
@@ -214,9 +218,12 @@ class CnsStream:
         self.channel_names = None
         self.units = None
 
-        tree = xml.etree.ElementTree.parse(self.settings_file)
+        with open(self.settings_file, encoding='iso-8859-15') as f:
+            tree = xml.etree.ElementTree.parse(f)
         root = tree.getroot()
-        self.units = root.find('Units').text
+        units = root.find('Units')
+        if units is not None:
+            self.units = units.text
         if data_type == 'Integer':
             conv_txt = root.find('SampleConversion').text
             conv = [float(e) for e in conv_txt.split(',')]
@@ -224,7 +231,7 @@ class CnsStream:
                 self.gain = conv[1] / conv[3]
                 self.offset = 0
             else:
-                raise NotImplementedErro('Non symetric gain/offset scalling factor')
+                raise NotImplementedError('Non symetric gain/offset scalling factor')
         elif data_type == 'Composite':
             self.channel_names = []
             for e in root.find('CompositeElements'):
@@ -298,7 +305,7 @@ class CnsStream:
     
     def __repr__(self):
         if self.name is None:
-            name = self.raw_file.stem
+            name = self.raw_file.name
         else:
             name = self.name
         txt = f'CnsStream {name}  rate:{self.sample_rate:0.0f}Hz  shape:{self.shape}'
