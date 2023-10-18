@@ -280,7 +280,7 @@ class CnsStream:
                 #~ print('num_channels', num_channels, type(num_channels))
                 # data_uint24 = flat_data_uint24.reshape(num_frames, num_channels, 3)
                 self.raw_data = flat_data_uint24
-                self.data_strided = as_strided(self.raw_data.view('int32'), strides=(num_channels * 3, 3,), shape=(num_frames, num_channels))
+                self.data_strided = as_strided(self.raw_data.view('uint32'), strides=(num_channels * 3, 3,), shape=(num_frames, num_channels))
                 
                 self.shape = (num_frames, num_channels)
                 
@@ -392,6 +392,10 @@ class CnsStream:
             data_32bit = self.data_strided[i0 : i1]
             # need to remove the first 8bits
             data = data_32bit & 0x00ffffff
+            # handle the sign of 24 bits and shift it
+            signs = (data > 0x0080ffff).astype('uint32')
+            signs *= 0xff000000
+            data = (data | signs).view('int32')
         else:
             data = self.raw_data[i0: i1]
 
