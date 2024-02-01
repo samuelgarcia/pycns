@@ -251,9 +251,11 @@ class TimeSlider(W.HBox):
     def time_label_changed(self, change=None):
         try:
             new_time = np.datetime64(self.time_label.value).view(self.dtype)
-            self.update_time(new_time=new_time, update_slider=True)
         except:
-            pass
+            new_time = None
+
+        if new_time is not None:
+            self.update_time(new_time=new_time, update_slider=True)
 
     def win_size_changed(self, change=None):
         self.update_time()
@@ -323,24 +325,44 @@ class Viewer(W.Tab):
         # TODO force canvas to ipympl
         
         # this trick prevent the figure to be displayed in jupyter directly
+        # mpl_output = W.Output(layout={'border': '1px solid black'})
         mpl_output = W.Output()
         with plt.ioff():
             with mpl_output:
-                self.fig = plt.figure(constrained_layout=True)  # 
+                # self.fig = plt.figure(constrained_layout=True, )  # figsize=(14, 10)
+                self.fig = plt.figure(constrained_layout=False, )
                 canvas = self.fig.canvas
                 # self.canvas = canvas
-                canvas.toolbar_visible = False
+                canvas.toolbar_visible = True
                 canvas.header_visible = False
                 canvas.footer_visible = False
                 # canvas.resizable = False
                 # canvas.resizable = True
                 # canvas.max_width = '2800px'
-                canvas.layout.min_height = '200px'
-                canvas.layout.min_width = '400px'
+                # canvas.layout.min_height = '200px'
+                # canvas.layout.min_width = '400px'
                 # canvas.layout.width = '100%'
                 # canvas.capture_scroll = False
                 self.axs = None
-
+                plt.show()
+        # print(canvas)
+        # with plt.ioff():
+        #         # self.fig = plt.figure(constrained_layout=True, )  # figsize=(14, 10)
+        #         self.fig = plt.figure(constrained_layout=False, figsize=None )
+        #         canvas = self.fig.canvas
+        #         # self.canvas = canvas
+        #         canvas.toolbar_visible = False
+        #         canvas.header_visible = False
+        #         canvas.footer_visible = False
+        #         # canvas.resizable = False
+        #         canvas.resizable = True
+        #         # canvas.max_width = '2800px'
+        #         # canvas.layout.min_height = '200px'
+        #         # canvas.layout.min_width = '400px'
+        #         canvas.layout.width = '100%'
+        #         # canvas.capture_scroll = False
+        #         self.axs = None
+        #         plt.show()
 
         start, stop = self.data.get_start_stop(stream_names)
         self.time_slider = TimeSlider(start, stop)
@@ -352,10 +374,16 @@ class Viewer(W.Tab):
         self.channel_selector.observe(self.full_refresh)
         
         tab0 = W.VBox([self.fig.canvas, self.time_slider])
+        # tab0 = W.VBox([mpl_output, self.time_slider])
+        
         tab1 = W.VBox([self.channel_selector])
-        super(W.Tab, self).__init__(children=[tab0, tab1], layout=W.Layout(width = '100%'))
+        super(W.Tab, self).__init__(children=[tab0, tab1], layout=W.Layout(width='100%'))
         self.set_title(0, 'main')
         self.set_title(1, 'options')
+
+        
+        canvas.layout.width = '100%'
+        # mpl_output.layout.width = '100%'
         
         self.full_refresh()
     
