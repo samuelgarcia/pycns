@@ -106,59 +106,6 @@ class DataFromCns:
         return sig, times
 
 
-
-
-
-
-def make_timeslider(data, stream_names, time_range=None, ):
-    
-
-    start, stop = data.get_start_stop(stream_names)
-
-    if time_range is None:
-        time_range = [start, start + np.timedelta64(300, 's')]
-    
-
-
-    # but_left = W.Button(description='<', disabled=False, button_style='', icon='check')
-    # but_right = W.Button(description='>', disabled=False, button_style='', icon='check')
-
-
-    time_label = W.Label(value=f'{time_range[0]}',
-                         # layout=W.Layout(width=f'6cm')
-                         layout=W.Layout(width=f'20%')
-                         )
-
-    time_slider = W.IntSlider(
-        orientation='horizontal',
-        description='time:',
-        value=time_range[0].view(np.int64),
-        min=start.view(np.int64),
-        max=stop.view(np.int64),
-        readout=False,
-        continuous_update=False,
-        #~ continuous_update=True,
-        # layout=W.Layout(width=f'{width_cm}cm')
-        layout=W.Layout(width=f'70%')
-    )
-
-
-    delta_s = (time_range[1] - time_range[0]).astype("timedelta64[s]").view(int)
-    
-    window_sizer = W.BoundedFloatText(value=delta_s, step=60, min=1,max=3600 * 4,
-                                      description='win (s)',
-                                     # layout=W.Layout(width=f'4cm')
-                                     layout=W.Layout(width='auto')
-                                     # layout=W.Layout(width=f'10%')
-                                     )
-
-
-    main_widget = W.HBox([time_slider, time_label, window_sizer])
-    some_widgets = {"time_label": time_label, "time_slider": time_slider, "window_sizer" : window_sizer}
-
-    # return widget, controller
-    return main_widget, some_widgets
-
 class TimeSlider(W.HBox):
 
     time_range_int = traitlets.Tuple(traitlets.Int(), traitlets.Int())
@@ -373,7 +320,10 @@ class Viewer(W.Tab):
         self.time_slider.observe(self.refresh)
         self.channel_selector.observe(self.full_refresh)
         
-        tab0 = W.VBox([self.fig.canvas, self.time_slider])
+        but_refresh = W.Button(description='autoscale', disabled=False, icon='refresh')
+        but_refresh.on_click(self.auto_scale)
+        tools = W.HBox([but_refresh])
+        tab0 = W.VBox([tools, self.fig.canvas, self.time_slider])
         # tab0 = W.VBox([mpl_output, self.time_slider])
         
         tab1 = W.VBox([self.channel_selector])
@@ -433,11 +383,11 @@ class Viewer(W.Tab):
             ax.sharex(self.axs[-1])
             ax.tick_params(labelbottom=False)
     
-    def full_refresh(self, change=None):
+    def full_refresh(self,  change=None):
         self.reset_axes()
         self.refresh()
     
-    def refresh(self, change=None):
+    def refresh(self, change=None, autoscale=False,):
         if self.axs is None:
             self.reset_axes()
         
@@ -450,7 +400,6 @@ class Viewer(W.Tab):
             
             ax = self.axs[i]
             
-            #ax.clear()
             for l in ax.lines:
                 # clear remove also labels
                 l.remove()
@@ -459,16 +408,27 @@ class Viewer(W.Tab):
             if stream_name not in self.ext_plots:
                 sig, times = self.data.get_signal(stream_name, chan, t0, t1)
                 ax.plot(times, sig, color='k')
+                if autoscale:
+                    # a clear is enough to make matplotlib make new ylim
+                    ax.relim()
+                    ax.autoscale_view(scalex=False, scaley=True)
             else:
                 self.ext_plots[stream_name].plot(ax, t0, t1)
-        
+
+
+
         # set scale on last axis
         ax = self.axs[-1]
         ax.set_xlim(t0, t1)
 
+
+        
+
         self.fig.canvas.draw()
         # self.fig.canvas.flush_events()
 
+    def auto_scale(self, change=None,):
+        self.refresh(autoscale=True)
 
 def get_viewer(*args, **kwargs):
     return Viewer(*args, **kwargs)
