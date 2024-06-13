@@ -265,7 +265,10 @@ class Viewer(W.Tab):
         if ext_plots is not None:
             # TODO check that this do not overlap with channel names
             # channels = data.get_channels(stream_names)
-            self.ext_plots = {p.name: p for p in ext_plots}
+            if isinstance(ext_plots, list):
+                self.ext_plots = {p.name: p for p in ext_plots}
+            else:
+                self.ext_plots = ext_plots
         else:
             self.ext_plots = {}
         
