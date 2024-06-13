@@ -234,13 +234,16 @@ class CnsStream:
                 self.channel_names.append(chan_name)
         
         if data_type in ('Integer', 'Composite'):
-            conv_txt = root.find('SampleConversion').text
-            conv = [float(e) for e in conv_txt.split(',')]
-            if conv[0] == -conv[1] and conv[2] == -conv[3]:
-                self.gain = conv[3] / conv[1]
-                self.offset = 0
-            else:
-                raise NotImplementedError('Non symetric gain/offset scalling factor')
+            conv_child = root.find('SampleConversion')
+            if conv_child is not None:
+                conv_txt = conv_child.text
+
+                conv = [float(e) for e in conv_txt.split(',')]
+                if conv[0] == -conv[1] and conv[2] == -conv[3]:
+                    self.gain = conv[3] / conv[1]
+                    self.offset = 0
+                else:
+                    raise NotImplementedError('Non symetric gain/offset scalling factor')
 
 
         self.need_24_bit_convert = False

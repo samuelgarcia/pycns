@@ -372,7 +372,7 @@ class Viewer(W.Tab):
                     label = chan
                 units = self.data.get_units(stream_name)
                 if units is not None:
-                    label = label + f' [{units}]'
+                    label = label + f'\n[{units}]'
             else:
                 label = stream_name
 
