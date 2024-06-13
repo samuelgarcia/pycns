@@ -84,12 +84,12 @@ class CnsReader:
 
         self.streams = {}
         for name, raw_file in self.stream_names.items():
-            self.streams[name] = CnsStream(raw_file, name)
-            # try:
-            #     self.streams[name] = CnsStream(raw_file, name)
-            # except:
-            #     pass
-            #     print('Problem to read this file:', raw_file)
+            # self.streams[name] = CnsStream(raw_file, name)
+            try:
+                self.streams[name] = CnsStream(raw_file, name)
+            except:
+                pass
+                print('Problem to read this file:', raw_file)
 
     def __repr__(self):
         txt = f'CnsReader: {self.folder.stem}\n'
@@ -276,11 +276,22 @@ class CnsStream:
                 #~ t0 = time.perf_counter()
                 flat_data_uint24 = np.memmap(raw_file, mode='r', dtype='u1')
                 num_frames = flat_data_uint24.size // (num_channels * 3)
+                
+                # this is needed because the last point will be outside
+                
                 #~ print('num_frames', num_frames, type(num_frames))
                 #~ print('num_channels', num_channels, type(num_channels))
                 # data_uint24 = flat_data_uint24.reshape(num_frames, num_channels, 3)
-                self.raw_data = flat_data_uint24
-                self.data_strided = as_strided(self.raw_data.view('uint32'), strides=(num_channels * 3, 3,), shape=(num_frames, num_channels))
+
+                # we need to remove the last sample to be sure that the last is not outside
+                num_frames = num_frames - 1
+                # self.raw_data = flat_data_uint24[:-(num_channels*3) + 1]
+                new_size = (num_frames * num_channels * 3)
+                new_size += 4 - new_size % 4
+                self.raw_data = flat_data_uint24[:new_size]
+                self.data_strided = as_strided(self.raw_data.view('uint32'),
+                                               strides=(num_channels * 3, 3,),
+                                               shape=(num_frames, num_channels))
                 
                 self.shape = (num_frames, num_channels)
                 
@@ -409,4 +420,3 @@ class CnsStream:
             return data, times
         else:
             return data
-
