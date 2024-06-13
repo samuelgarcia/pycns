@@ -225,19 +225,23 @@ class CnsStream:
         if units is not None:
             self.units = units.text
         if data_type == 'Integer':
-            conv_txt = root.find('SampleConversion').text
-            conv = [float(e) for e in conv_txt.split(',')]
-            if conv[0] == -conv[1] and conv[2] == -conv[3]:
-                self.gain = conv[1] / conv[3]
-                self.offset = 0
-            else:
-                raise NotImplementedError('Non symetric gain/offset scalling factor')
+            pass
         elif data_type == 'Composite':
             self.channel_names = []
             for e in root.find('CompositeElements'):
                 chan_txt = e.attrib['type'].split(',')
                 chan_name = chan_txt[1]
                 self.channel_names.append(chan_name)
+        
+        if data_type in ('Integer', 'Composite'):
+            conv_txt = root.find('SampleConversion').text
+            conv = [float(e) for e in conv_txt.split(',')]
+            if conv[0] == -conv[1] and conv[2] == -conv[3]:
+                self.gain = conv[3] / conv[1]
+                self.offset = 0
+            else:
+                raise NotImplementedError('Non symetric gain/offset scalling factor')
+
 
         self.need_24_bit_convert = False
         # read data buffer
@@ -312,7 +316,7 @@ class CnsStream:
                 raise NotImplementedError('Composite data type not known')
             
         else:
-            raise ValueErrror
+            raise ValueError
     
     def __repr__(self):
         if self.name is None:
