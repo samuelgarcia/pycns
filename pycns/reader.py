@@ -10,9 +10,12 @@ import scipy.interpolate
 # this is needed for the 24bit trick
 from numpy.lib.stride_tricks import as_strided
 
+import dateutil
+
 translation = {
     'ABP_Dias': 'DAP',
 }
+
 
 def explore_folder(folder, with_quality=False, with_processed=False, translate=False):
 
@@ -76,7 +79,9 @@ class CnsReader:
     
     
     """
-    def __init__(self, folder, with_quality=False, with_processed=False, translate=False):
+    def __init__(self, folder, with_quality=False, with_processed=False, translate=False, with_events=False,
+                 event_time_zone=None,
+                 ):
         self.folder = Path(folder)
 
         self.stream_names = explore_folder(folder, with_quality=with_quality, 
@@ -90,10 +95,20 @@ class CnsReader:
             except:
                 pass
                 print('Problem to read this file:', raw_file)
+        
+        self.events = None
+        event_file = self.folder /  'Events.xml'
+        if with_events and event_file.is_file():
+            assert event_time_zone is not None, "To read event you need to provide event_time_zone"
+            self.events = read_events_xml(event_file, time_zone=event_time_zone)
 
     def __repr__(self):
         txt = f'CnsReader: {self.folder.stem}\n'
-        txt +=f'{len(self.stream_names)} streams : {list(self.stream_names.keys())}'
+        txt += f'{len(self.stream_names)} streams : {list(self.stream_names.keys())}'
+        if self.events is not None:
+            n_events = self.events['name'].size
+            txt += f'\nEvents: {n_events}'
+
 
         return txt
     
@@ -427,3 +442,40 @@ class CnsStream:
             return data, times
         else:
             return data
+
+
+def convert_from_time_zone_to_gmt(start_time, time_zone):
+    import pandas as pd
+    return pd.Series(start_time).dt.tz_localize(time_zone).dt.tz_convert('GMT').values
+
+
+def read_events_xml(event_file, time_zone):
+    with open(event_file, encoding='utf-8') as f:
+        tree = xml.etree.ElementTree.parse(f)
+    root = tree.getroot()
+
+    fields = {
+        'Name': ('name', 'str'),
+        'StartTime': ('start_time', 'datetime64[us]'),
+        'Duration': ('duration', 'float64'),
+        'Description': ('description', 'str'),
+    }
+
+    events = {}
+    for field_name, (key, dtype) in fields.items():
+        events[key] = []
+
+    for e in root.findall('Event'):
+        for field_name, (key, dtype) in fields.items():
+            value = e.find(field_name).text
+            if value is None:
+                value = ''
+            value = np.dtype(dtype).type(value)
+            events[key].append(value)
+
+    for field_name, (key, dtype) in fields.items():
+        events[key] = np.array(events[key], dtype=dtype)
+    
+    events['start_time'] = convert_from_time_zone_to_gmt(events['start_time'], time_zone)
+
+    return events

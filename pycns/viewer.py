@@ -1,6 +1,8 @@
 # https://ipywidgets.readthedocs.io/en/7.6.3/examples/Widget%20Styling.html
 
 
+import datetime
+
 import numpy as np
 
 import xarray as xr
@@ -20,6 +22,7 @@ class DataFromXarray:
     def __init__(self, ds):
         self.ds = ds
         self.prefered_dtype = np.dtype('datetime64[ns]')
+        self.events = None
 
     def get_stream_names(self):
         return list(self.ds.keys())
@@ -74,6 +77,7 @@ class DataFromCns:
     def __init__(self, reader):
         self.reader = reader
         self.prefered_dtype = np.dtype('datetime64[us]')
+        self.events = reader.events
 
     def get_stream_names(self):
         return list(self.reader.streams.keys())
@@ -120,7 +124,9 @@ class TimeSlider(W.HBox):
         self.start_int = self.start.view(np.int64)
         self.stop_int = self.stop.view(np.int64)
         
+        
         self.time_range_int = (int(time_range[0].view(np.int64)), int(time_range[1].view(np.int64)))
+        self.observe(self.on_time_range_int_changed, names=['time_range_int'], type='change')
         
         
         layout = W.Layout(align_items="center", width="1.5cm", height="100%")
@@ -174,13 +180,16 @@ class TimeSlider(W.HBox):
         t1 = np.int64(self.time_range_int[1]).view(self.dtype)
         return t0, t1
     
-    def update_time(self, new_time=None, update_slider=False, update_label=False):
+    def update_time(self, new_time=None, delta_s=None, update_slider=False, update_label=False):
 
         if new_time is None:
-            t0 = np.int64(self.slider.value).view(self.dtype)
+            # t0 = np.int64(self.slider.value).view(self.dtype)
+            t0 = np.int64(self.time_range_int[0]).view(self.dtype)
         else:
             t0 = new_time.astype(self.dtype)
-        delta_s = self.window_sizer.value
+        
+        if delta_s is None:
+            delta_s = self.window_sizer.value
         t1 = (t0 + np.timedelta64(int(delta_s), 's')).astype(self.dtype)
         
         self.time_range_int = (int(t0.view(np.int64)), int(t1.view(np.int64)))
@@ -194,7 +203,11 @@ class TimeSlider(W.HBox):
             self.window_sizer.unobserve(self.win_size_changed)
             self.slider.value = int(t0.view('int64'))
             self.window_sizer.observe(self.win_size_changed)
-    
+
+    def on_time_range_int_changed(self, change=None):
+        self.update_time( update_slider=True, update_label=True)
+        
+
     def time_label_changed(self, change=None):
         try:
             new_time = np.datetime64(self.time_label.value).view(self.dtype)
@@ -205,7 +218,8 @@ class TimeSlider(W.HBox):
             self.update_time(new_time=new_time, update_slider=True)
 
     def win_size_changed(self, change=None):
-        self.update_time()
+        delta_s = self.window_sizer.value
+        self.update_time(delta_s=delta_s)
         
     def slider_moved(self, change=None):
         new_time = np.int64(self.slider.value).view(self.dtype)
@@ -247,10 +261,43 @@ def make_channel_selector(data, stream_names, ext_plots, width_cm=10, height_cm=
     return channel_selector, some_widgets
 
 
+class EventSelector(W.VBox):
+    index = traitlets.Int()
+
+    def __init__(self, events, **kwargs):
+        self.events = events
+
+        event_list = []
+        for i in range(self.events['start_time'].size):
+            start_time = self.events['start_time'][i].astype(datetime.datetime)
+            name = self.events['name'][i]
+            start_time_txt = start_time.strftime("%Y-%m-%d %H:%M:%S")
+            event_list.append(f"{start_time_txt} {name}")
+
+
+        self.selector = W.Select(
+            options=event_list,
+            value=None,
+            disabled=False,
+            layout=W.Layout(height="100%", width="12cm"),
+        )
+
+        super(W.VBox, self).__init__(
+            children=[self.selector],
+            layout=W.Layout(align_items="center"),
+            **kwargs,
+        )
+    
+        self.selector.observe(self.on_index_changed, names=['index'], type='change')
+
+    def on_index_changed(self, change=None):
+        self.index = self.selector.index
+
+
 
 
 class Viewer(W.Tab):
-    def __init__(self, data_in, stream_names, ext_plots=None):
+    def __init__(self, data_in, stream_names, ext_plots=None, with_events=True):
         
         if isinstance(data_in, xr.Dataset):
             self.data = DataFromXarray(data_in)
@@ -258,6 +305,13 @@ class Viewer(W.Tab):
             self.data = DataFromCns(data_in)
         else:
             raise ValueError(f'Viewer get wrong data {data_in}')
+
+        if with_events and self.data.events is not None:
+            self.event_selector = EventSelector(self.data.events)
+            self.event_selector.observe(self.on_event_changed, names='index', type='change')
+
+        else:
+            self.event_selector = None
 
         if stream_names is None:
             stream_names = self.data.get_stream_names()
@@ -325,8 +379,13 @@ class Viewer(W.Tab):
         
         but_refresh = W.Button(description='autoscale', disabled=False, icon='refresh')
         but_refresh.on_click(self.auto_scale)
-        tools = W.HBox([but_refresh])
+        if self.event_selector is not None:
+            tools = W.HBox([but_refresh, self.event_selector,])
+        else:
+            tools = W.HBox([but_refresh])
         tab0 = W.VBox([tools, self.fig.canvas, self.time_slider])
+
+            
         # tab0 = W.VBox([mpl_output, self.time_slider])
         
         tab1 = W.VBox([self.channel_selector])
@@ -432,6 +491,16 @@ class Viewer(W.Tab):
 
     def auto_scale(self, change=None,):
         self.refresh(autoscale=True)
+    
+    def on_event_changed(self, change=None,):
+        ind = self.event_selector.index
+        if ind is None:
+            return
+        delta = self.time_slider.time_range_int[1] - self.time_slider.time_range_int[0]
+        start_time_int = int(self.data.events['start_time'].view('int64')[ind])
+        self.time_slider.time_range_int = (start_time_int - delta //2, start_time_int+delta // 2)
+
+    
 
 def get_viewer(*args, **kwargs):
     return Viewer(*args, **kwargs)
