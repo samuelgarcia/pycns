@@ -2,6 +2,10 @@
 
 Reader and tools for analysing CNS monitor data
 
+## Doc
+
+https://pycns.readthedocs.io
+
 
 ## Installation
 
