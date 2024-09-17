@@ -1,0 +1,35 @@
+Examples
+========
+
+.. yep yep yep
+
+
+Here a simple example
+
+.. code-block:: python
+
+    from pycns import CnsReader, get_viewer
+    from pathlib import Path
+
+    base_folder = Path('/XXX/YYY/ZZZ')
+
+    # this show all available streams
+    cns_reader = CnsReader(raw_folder)
+    print(cns_reader)
+
+    # this show stream obkect
+    print(cns_reader.streams)
+
+    # get some chunk with time vector handle with numpy.datetime64
+    sig, times = cns_reader.streams['CO2'].get_data(isel=slice(100_000, 110_000), with_times=True, apply_gain=True)
+
+    # easy viewer to navigate (this work only in jupyter)
+    viewer = get_viewer(cns_reader)
+    display(viewer)
+
+    # export some streams to xarray with a resample on common time base
+    stream_names = ['ECG_II', 'RESP', 'EEG']
+    start = '2021-01-08T00:10:15'
+    stop = '2021-01-08T00:30:52'
+    ds = cns_reader.export_to_xarray(stream_names, start=start, stop=stop, resample=True, sample_rate=100.)
+
