@@ -28,19 +28,19 @@ git clone pull origin main
 from pycns import CnsReader, get_viewer
 from pathlib import Path
 
-base_folder = Path('/XXX/YYY/ZZZ')
+raw_folder = Path('/XXX/YYY/ZZZ/')
 
-# this show all available streams
+# this shows all available streams
 cns_reader = CnsReader(raw_folder)
 print(cns_reader)
 
-# this show stream obkect
+# this shows stream object
 print(cns_reader.streams)
 
-# get some chunk with time vector handle with numpy.datetime64
+# get some chunk with time vector handled with numpy.datetime64
 sig, times = cns_reader.streams['CO2'].get_data(isel=slice(100_000, 110_000), with_times=True, apply_gain=True)
 
-# easy viewer to navigate (this work only in jupyter)
+# easy viewer to navigate (this works only in jupyter)
 viewer = get_viewer(cns_reader)
 display(viewer)
 
