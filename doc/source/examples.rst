@@ -33,11 +33,6 @@ How to get a numpy object from the CNS monitor raw data using pycns ?
     stop = '2021-01-08T00:30:50' # set a stop date
     sig, = cns_reader.streams['CO2'].get_data(sel=slice(start, stop))
 
-    # use apply_gain = True to load data with their proper unit
-    start = '2021-01-08T00:10:15' # set a start date
-    stop = '2021-01-08T00:30:50' # set a stop date
-    sig = cns_reader.streams['CO2'].get_data(sel=slice(start, stop), apply_gain = True)
-
     # use apply_gain = True to load data with their proper unit (default = False)
     start = '2021-01-08T00:10:15' # set a start date
     stop = '2021-01-08T00:30:50' # set a stop date
@@ -93,7 +88,8 @@ How to get a Xarray Dataset object from the CNS monitor raw data using pycns ?
     stop = '2021-01-08T00:30:52'
     ds = cns_reader.export_to_xarray(stream_names, start=start, stop=stop, resample=True, sample_rate=256.)
 
-How to use the toolbox as a viewer ? (should be used on a jupyter notebook using %matplotlib widgets)
+How to use the toolbox as a viewer ? 
+Note : should be used on a jupyter notebook using %matplotlib widgets (pip install -U ipywidgets==7.7.1)
 
 .. code-block:: python
 
