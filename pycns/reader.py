@@ -95,7 +95,12 @@ class CnsReader:
             except:
                 pass
                 print('Problem to read this file:', raw_file)
-        
+
+        self.datetime_reference = min([self.streams[name].index["datetime"][0] for name in self.streams.keys()])
+        for stream in self.streams.values():
+            stream.set_datetime_reference(self.datetime_reference)
+
+
         self.events = None
         event_file = self.folder /  'Events.xml'
         if with_events and event_file.is_file():
@@ -336,6 +341,8 @@ class CnsStream:
         else:
             raise ValueError
     
+        self._datetime_reference = None
+
     def __repr__(self):
         if self.name is None:
             name = self.raw_file.name
@@ -344,48 +351,60 @@ class CnsStream:
         txt = f'CnsStream {name}  rate:{self.sample_rate:0.0f}Hz  shape:{self.shape}'
         return txt
     
-    def get_times(self):
+    def set_datetime_reference(self, datetime_reference):
+        self._datetime_reference = datetime_reference
+
+    def get_times(self, as_second=False):
         
 
         if hasattr(self, '_times'):
-            # TODO make option to cache or not the times
-            return self._times
-    
-        length = self.shape[0]
-        times = np.zeros(length, dtype='datetime64[us]')
+            
+            times = self._times
+        else:
+
         
-        # strategy 1 : interpolate between runs
-        #~ for i in range(index.size):
-            #~ ind0 = index[i]['sample_ind']
-            #~ datetime0 = index[i]['datetime']
-            #~ if i < (index.size - 1):
-                #~ ind1 = index[i +1]['sample_ind']
-                #~ datetime1 = index[i +1]['datetime']
-            #~ else:
-                #~ ind1 = np.uint64(data.shape[0])
-                #~ sample_interval_us = index[i]['sample_interval_integer'] + (index[i]['sample_interval_fract'] / 2 **32)
-                #~ datetime1 = datetime0 + int((ind1-ind0) * sample_interval_us)
-            #~ local_times = np.linspace(datetime0.astype(int), datetime1.astype(int), ind1 - ind0, endpoint=False).astype("datetime64[us]")
-            #~ times[ind0:ind1] = local_times
+            length = self.shape[0]
+            times = np.zeros(length, dtype='datetime64[us]')
+            
+            # strategy 1 : interpolate between runs
+            #~ for i in range(index.size):
+                #~ ind0 = index[i]['sample_ind']
+                #~ datetime0 = index[i]['datetime']
+                #~ if i < (index.size - 1):
+                    #~ ind1 = index[i +1]['sample_ind']
+                    #~ datetime1 = index[i +1]['datetime']
+                #~ else:
+                    #~ ind1 = np.uint64(data.shape[0])
+                    #~ sample_interval_us = index[i]['sample_interval_integer'] + (index[i]['sample_interval_fract'] / 2 **32)
+                    #~ datetime1 = datetime0 + int((ind1-ind0) * sample_interval_us)
+                #~ local_times = np.linspace(datetime0.astype(int), datetime1.astype(int), ind1 - ind0, endpoint=False).astype("datetime64[us]")
+                #~ times[ind0:ind1] = local_times
+            
+            index = self.index
+            # strategy 2 : use the sample interval per block
+            for i in range(index.size):
+                ind0 = index[i]['sample_ind']
+                datetime0 = index[i]['datetime']
+                if i < (index.size - 1):
+                    ind1 = index[i +1]['sample_ind']
+                else:
+                    ind1 = np.uint64(length)
+                sample_interval_us = index[i]['sample_interval_integer'] + (index[i]['sample_interval_fract'] / 2 **32)
+                local_times = datetime0 + (np.arange(ind1- ind0) * sample_interval_us).astype('timedelta64[us]')
+                times[ind0:ind1] = local_times
+            
+            self._times = times
         
-        index = self.index
-        # strategy 2 : use the sample interval per block
-        for i in range(index.size):
-            ind0 = index[i]['sample_ind']
-            datetime0 = index[i]['datetime']
-            if i < (index.size - 1):
-                ind1 = index[i +1]['sample_ind']
-            else:
-                ind1 = np.uint64(length)
-            sample_interval_us = index[i]['sample_interval_integer'] + (index[i]['sample_interval_fract'] / 2 **32)
-            local_times = datetime0 + (np.arange(ind1- ind0) * sample_interval_us).astype('timedelta64[us]')
-            times[ind0:ind1] = local_times
-        
-        self._times = times
-        return times
+        if not as_second:
+            return times
+        else:
+            if self._datetime_reference is None:
+                raise ValueError("time_as_second is not possible : no reference")
+
+            return (times - self._datetime_reference).astype("float64") / 1e6
 
 
-    def get_data(self, isel=None, sel=None, with_times=False, apply_gain=False):
+    def get_data(self, isel=None, sel=None, with_times=False, apply_gain=False, time_as_second=False):
         """
 
         isel: selection by integer range
@@ -393,7 +412,7 @@ class CnsStream:
         
         """
         
-        times = self.get_times()
+        times = self.get_times(as_second=time_as_second)
 
         i0 = 0
         i1 = self.shape[0]
