@@ -412,8 +412,6 @@ class CnsStream:
         
         """
         
-        times = self.get_times(as_second=time_as_second)
-
         i0 = 0
         i1 = self.shape[0]
         
@@ -421,7 +419,7 @@ class CnsStream:
         if sel is not None:
             assert isel is None
             # TODO find somthing faster!!!!! only with the index
-            
+            times = self.get_times()
             if sel.start is not None:
                 i0 = np.searchsorted(times, np.datetime64(sel.start))
             if sel.stop is not None:
@@ -457,6 +455,7 @@ class CnsStream:
                 data += self.offset
 
         if with_times:
+            times = self.get_times(as_second=time_as_second)
             times = times[i0 :i1]
             return data, times
         else:
