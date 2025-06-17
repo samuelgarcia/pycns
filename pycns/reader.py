@@ -450,7 +450,8 @@ class CnsStream:
             data = self.raw_data[i0: i1]
 
         if apply_gain and self.gain is not None:
-            data = data * self.gain
+            data = data.astype('float32')
+            data *= self.gain
             if self.offset is not None and self.offset != 0.:
                 data += self.offset
 
