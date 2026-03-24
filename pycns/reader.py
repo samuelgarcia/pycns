@@ -7,6 +7,7 @@ import xml.etree.ElementTree
 import numpy as np
 import xarray as xr
 import scipy.interpolate
+import scipy.signal
 # this is needed for the 24bit trick
 from numpy.lib.stride_tricks import as_strided
 
@@ -169,13 +170,32 @@ class CnsReader:
                 sig, times = stream.get_data(sel=slice(start - delta, stop + delta), with_times=True, apply_gain=True)
 
                 # resample
+                # we cannot use scipy.signal.resample because the times vector is not regular
                 dims = ('times', )
                 coords = {'times': common_times}
                 times = times.astype('datetime64[ns]')
-                f = scipy.interpolate.interp1d(times.astype('int64'), sig, kind='linear', axis=0,
-                                           copy=True, bounds_error=False,
-                                           fill_value=np.nan, assume_sorted=True)
-                sig = f(common_times.astype('int64'))
+
+                if sample_rate > stream.sample_rate:
+                    # upsampling : interpolation linear fast enougth
+                    f = scipy.interpolate.interp1d(times.astype('int64'), sig, kind='linear', axis=0,
+                                               copy=True, bounds_error=False,
+                                               fill_value=np.nan, assume_sorted=True)
+                    sig = f(common_times.astype('int64'))
+                else:
+                    # downsampling = linear interpolation upsampling to regular grid then decimate
+                    ratio = int(np.ceil(stream.sample_rate / sample_rate))
+                    sample_rate_up = sample_rate * ratio
+                    period_up_ns = np.int64(1/sample_rate_up * 1e9)
+
+                    times_up = np.arange(start.astype('datetime64[ns]').astype('int64'),
+                                    stop.astype('datetime64[ns]').astype('int64') +  (ratio)*period_up_ns,
+                                    period_up_ns).astype('datetime64[ns]')
+                    times_up = times_up[: common_times.size * ratio]
+                    f = scipy.interpolate.interp1d(times.astype('int64'), sig, kind='linear', axis=0,
+                                            copy=True, bounds_error=False,
+                                            fill_value=np.nan, assume_sorted=True)
+                    sig = f(times_up.astype('int64'))
+                    sig = scipy.signal.decimate(sig, q=ratio, ftype='fir', n=None, zero_phase=True, axis=0)
 
             # channels when 2D
             if sig.ndim == 2 and stream.channel_names is not None:
